@@ -262,6 +262,9 @@ class RPA_CAIXA:
                 elif "Área do terreno" in link.text:
                     values = link.text.split("Área do terreno")
                     data["area_terreno"]  = values[1].replace("=", "").strip()
+                elif "Área privativa" in link.text:
+                    values = link.text.split("Área privativa")
+                    data["area_privativa"]  = values[1].replace("=", "").strip()
             return data
         except:
             return None
