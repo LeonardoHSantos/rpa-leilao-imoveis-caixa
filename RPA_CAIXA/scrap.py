@@ -54,99 +54,234 @@ class RPA_CAIXA:
             "User-Agent": random.choice(self.user_agents)
         }
     
-    def scrap_caixa(self, UF):
-        url = f'https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_{UF}.csv'
-        headers = self.prepare_headers()
-        response = requests.get(
-            url=url,
-            headers=headers
-            )
-        if response.status_code == 200:
-            linhas = response.text.strip().split('\n')[1:]
-            linhas.pop(1)
-            rows_df = list(map( lambda x: x.split(";"), linhas))
-            columns = list(map( lambda x: x.strip(), rows_df[0]))
-            df_imoveis = pd.DataFrame(columns=columns, data=rows_df[1:])
-            print(df_imoveis)
-            print(df_imoveis.info())
-            self.preparar_payload(df_imoveis=df_imoveis)
-            return
+    def scrap_caixa(self, UF, imovel_id=None, update_database=False):
+
+        for _uf, _nome in self.estados_completos.items():
+
+            check_uf = False
+            if UF == "geral":
+                check_uf = True
+            elif UF == _uf:
+                check_uf = True
+            
+            print(f"Processando UF: {UF} | _uf: {_uf} | _nome: {_nome}")
+            if check_uf:
+                url = f'https://venda-imoveis.caixa.gov.br/listaweb/Lista_imoveis_{_uf}.csv'
+                headers = self.prepare_headers()
+                response = requests.get(
+                    url=url,
+                    headers=headers
+                    )
+                if response.status_code == 200:
+                    try:
+                        linhas = response.text.strip().split('\n')[1:]
+
+                        if "return status" not in response.text:
+                            print(">>>> processar dados...")
+                            linhas.pop(1)
+                            rows_df = list(map( lambda x: x.split(";"), linhas))
+                            columns = list(map( lambda x: x.strip(), rows_df[0]))
+                            df_imoveis = pd.DataFrame(columns=columns, data=rows_df[1:])
+                            print(df_imoveis)
+                            # print(df_imoveis.info())
+
+                            if imovel_id:
+                                self.preparar_payload_test(df_imoveis=df_imoveis, imovel_id=imovel_id, update_database=update_database)
+                            else:
+                                self.preparar_payload(df_imoveis=df_imoveis)
+                            # return
+                        else:
+                           print(">>>> não processar dados...") 
+                    except Exception as e:
+                        print(f'Erro em scrap_caixa: {str(e)}')
     
     def preparar_payload(self, df_imoveis: pd.DataFrame):
         payload = {}
         for i in df_imoveis.index:
-            
-            # if "8787708427581" in df_imoveis["Link de acesso"][i]:
-            payload[i] = {}
-            data = {}
-            for col in df_imoveis.columns:
-                data.update({
-                    col: str(df_imoveis[col][i]).strip()
-                })
+            try:
+                payload[i] = {}
+                data = {}
+                for col in df_imoveis.columns:
+                    data.update({
+                        col: str(df_imoveis[col][i]).strip()
+                    })
 
-            # try:
-            data = self.delete_column_payload(payload=data, colname="Descrição")
-            _UF = data["UF"]
-            data["Estado"] = self.estados_completos.get(_UF, "")
-            _TOTAL_UF = len(df_imoveis["UF"])
-            numero_matricula = data.get("N° do imóvel") or data.get("NḞ do imóvel") or None
-            if numero_matricula:
-                data["N° do imóvel"] = numero_matricula
-                print(f"\n ----------- ID: {i} | UF: {_UF} - QTD: {_TOTAL_UF} | numero_matricula: {numero_matricula}")
-                # ----------------------------------------------------------------------------------------------------------------------
-                # ----------------------------------------------------------------------------------------------------------------------
-                try:
-                    del data["NḞ do imóvel"]
-                except:
-                    pass
-                # ----
-                valor_avaliacao = data.get("Valor de avaliação") or data.get("Valor de avaliaçăo")
-                data["Valor de avaliação"] = valor_avaliacao
-                try:
-                    del data["Valor de avaliaçăo"]
-                except:
-                    pass
-                # ----
-                descricao = data.get("Descriçăo") or data.get("Descrição")
-                data["Descrição"] = descricao
-                try:
-                    del data["Descriçăo"]
-                except:
-                    pass
-                # ----------------------------------------------------------------------------------------------------------------------
-                if len(numero_matricula) < 13:
-                    total_zeros = 13 - len(numero_matricula)
-                    nova_string = []
-                    for i in range(total_zeros):
-                        nova_string.append("0")
-                    numero_matricula ="".join(nova_string) + numero_matricula
+                # try:
+                data = self.delete_column_payload(payload=data, colname="Descrição")
+                _UF = data["UF"]
+                data["Estado"] = self.estados_completos.get(_UF, "")
+                _TOTAL_UF = len(df_imoveis["UF"])
+                numero_matricula = data.get("N° do imóvel") or data.get("NḞ do imóvel") or None
+                if numero_matricula:
+                    data["N° do imóvel"] = numero_matricula
+                    print(f"\n ----------- ID: {i} | UF: {_UF} - QTD: {_TOTAL_UF} | numero_matricula: {numero_matricula}")
+                    # ----------------------------------------------------------------------------------------------------------------------
+                    # ----------------------------------------------------------------------------------------------------------------------
+                    try:
+                        del data["NḞ do imóvel"]
+                    except:
+                        pass
+                    # ----
+                    valor_avaliacao = data.get("Valor de avaliação") or data.get("Valor de avaliaçăo")
+                    data["Valor de avaliação"] = valor_avaliacao
+                    try:
+                        del data["Valor de avaliaçăo"]
+                    except:
+                        pass
+                    # ----
+                    descricao = data.get("Descriçăo") or data.get("Descrição")
+                    data["Descrição"] = descricao
+                    try:
+                        del data["Descriçăo"]
+                    except:
+                        pass
+                    # ----
+                    endereco = data.get("Endereēo") or data.get("Endereço")
+                    data["Endereço"] = endereco
+                    try:
+                        del data["Endereēo"]
+                    except:
+                        pass
+                    # ----
+                    preco = data.get("Preēo") or data.get("Preço")
+                    data["Preço"] = preco
+                    try:
+                        del data["Preēo"]
+                    except:
+                        pass
+                    # ----
+                    valor_avaliacao = data.get("Valor de avaliaēćo") or data.get("Valor de avaliação")
+                    data["Valor de avaliação"] = valor_avaliacao
+                    try:
+                        del data["Valor de avaliaēćo"]
+                    except:
+                        pass
+                    # ----
+                    descricao = data.get("Descriēćo") or data.get("Descrição")
+                    data["Descrição"] = descricao
+                    try:
+                        del data["Descriēćo"]
+                    except:
+                        pass
+                    # ----------------------------------------------------------------------------------------------------------------------
+                    if len(numero_matricula) < 13:
+                        total_zeros = 13 - len(numero_matricula)
+                        nova_string = []
+                        for i in range(total_zeros):
+                            nova_string.append("0")
+                        numero_matricula ="".join(nova_string) + numero_matricula
 
-                data["link_pdf_maticula"] = f'https://venda-imoveis.caixa.gov.br/editais/matricula/{_UF}/{numero_matricula}.pdf'
-                # ----------------------------------------------------------------------------------------------------------------------
+                    data["link_pdf_maticula"] = f'https://venda-imoveis.caixa.gov.br/editais/matricula/{_UF}/{numero_matricula}.pdf'
+                    # ----------------------------------------------------------------------------------------------------------------------
 
-                link_page = data["Link de acesso"]
-                valor_avaliacao = data["Valor de avaliação"]
-                data["info"] = self.scrap_page(link_imovel=link_page, valor_avaliacao=valor_avaliacao)
-                data = self.flatten_dict(d=data)
+                    link_page = data["Link de acesso"]
+                    valor_avaliacao = data["Valor de avaliação"]
+                    data["info"] = self.scrap_page(link_imovel=link_page, valor_avaliacao=valor_avaliacao)
+                    data = self.flatten_dict(d=data)
 
-                # ----------
-                data = self.delete_column_payload(payload=data, colname="UF")
-                data = self.delete_column_payload(payload=data, colname="rua")
-                data = self.rename_column_payload(payload=data, old_name="Endereço", new_name="rua")
-                data = self.rename_column_payload(payload=data, old_name="N° do imóvel", new_name="imovel_id")
-                
-                status_bubble_api = False
-                if data:
-                    status_bubble_api = self.bubble_api.bubble_api_imovel(data=data)
-                    data["status_bubble_api"] = status_bubble_api
-                    print(f">>>> status_bubble_api: {status_bubble_api}")
-                    print(json.dumps(data, indent=4))
-                payload[i] = data
-                
-                with open("DATA/data_links.json", "w", encoding="utf-8") as f:
-                    json.dump(payload, f, indent=4, ensure_ascii=False)
+                    # ----------
+                    data = self.delete_column_payload(payload=data, colname="UF")
+                    data = self.delete_column_payload(payload=data, colname="rua")
+                    data = self.rename_column_payload(payload=data, old_name="Endereço", new_name="rua")
+                    data = self.rename_column_payload(payload=data, old_name="N° do imóvel", new_name="imovel_id")
+                    
+                    status_bubble_api = False
+                    if data:
+                        status_bubble_api = self.bubble_api.bubble_api_imovel(data=data)
+                        data["status_bubble_api"] = status_bubble_api
+                        print(f">>>> status_bubble_api: {status_bubble_api}")
+                        print(json.dumps(data, indent=4))
+                    payload[i] = data
+                    
+                    with open("DATA/data_links.json", "w", encoding="utf-8") as f:
+                        json.dump(payload, f, indent=4, ensure_ascii=False)
 
-                # return
+                # return True
+            except Exception as e:
+                print(f'Erro em preparar_payload: {str(e)}')
+    
+    
+    def preparar_payload_test(self, df_imoveis: pd.DataFrame, imovel_id=None, update_database=False):
+
+        print(f"\n >>>> Imovel ID: {imovel_id} | update_database: {update_database} \n")
+
+        payload = {}
+        for i in df_imoveis.index:
+            try:
+                if imovel_id in df_imoveis["Link de acesso"][i]:
+                    payload[i] = {}
+                    data = {}
+                    for col in df_imoveis.columns:
+                        data.update({
+                            col: str(df_imoveis[col][i]).strip()
+                        })
+
+                    # try:
+                    data = self.delete_column_payload(payload=data, colname="Descrição")
+                    _UF = data["UF"]
+                    data["Estado"] = self.estados_completos.get(_UF, "")
+                    _TOTAL_UF = len(df_imoveis["UF"])
+                    numero_matricula = data.get("N° do imóvel") or data.get("NḞ do imóvel") or None
+                    if numero_matricula:
+                        data["N° do imóvel"] = numero_matricula
+                        print(f"\n ----------- ID: {i} | UF: {_UF} - QTD: {_TOTAL_UF} | numero_matricula: {numero_matricula}")
+                        # ----------------------------------------------------------------------------------------------------------------------
+                        # ----------------------------------------------------------------------------------------------------------------------
+                        try:
+                            del data["NḞ do imóvel"]
+                        except:
+                            pass
+                        # ----
+                        valor_avaliacao = data.get("Valor de avaliação") or data.get("Valor de avaliaçăo")
+                        data["Valor de avaliação"] = valor_avaliacao
+                        try:
+                            del data["Valor de avaliaçăo"]
+                        except:
+                            pass
+                        # ----
+                        descricao = data.get("Descriçăo") or data.get("Descrição")
+                        data["Descrição"] = descricao
+                        try:
+                            del data["Descriçăo"]
+                        except:
+                            pass
+                        # ----------------------------------------------------------------------------------------------------------------------
+                        if len(numero_matricula) < 13:
+                            total_zeros = 13 - len(numero_matricula)
+                            nova_string = []
+                            for i in range(total_zeros):
+                                nova_string.append("0")
+                            numero_matricula ="".join(nova_string) + numero_matricula
+
+                        data["link_pdf_maticula"] = f'https://venda-imoveis.caixa.gov.br/editais/matricula/{_UF}/{numero_matricula}.pdf'
+                        # ----------------------------------------------------------------------------------------------------------------------
+
+                        link_page = data["Link de acesso"]
+                        valor_avaliacao = data["Valor de avaliação"]
+                        data["info"] = self.scrap_page(link_imovel=link_page, valor_avaliacao=valor_avaliacao)
+                        data = self.flatten_dict(d=data)
+
+                        # ----------
+                        data = self.delete_column_payload(payload=data, colname="UF")
+                        data = self.delete_column_payload(payload=data, colname="rua")
+                        data = self.rename_column_payload(payload=data, old_name="Endereço", new_name="rua")
+                        data = self.rename_column_payload(payload=data, old_name="N° do imóvel", new_name="imovel_id")
+                        
+                        status_bubble_api = False
+                        if data:
+                            if update_database:
+                                status_bubble_api = self.bubble_api.bubble_api_imovel(data=data)
+                            data["status_bubble_api"] = status_bubble_api
+                            print(f">>>> status_bubble_api: {status_bubble_api}")
+                            print(json.dumps(data, indent=4))
+                        payload[i] = data
+                        
+                        with open("DATA/data_links.json", "w", encoding="utf-8") as f:
+                            json.dump(payload, f, indent=4, ensure_ascii=False)
+
+                        return
+            except Exception as e:
+                print(f'Erro em preparar_payload_test: {str(e)}')
 
     def scrap_page(self, link_imovel, valor_avaliacao):
         try:
@@ -182,6 +317,7 @@ class RPA_CAIXA:
             info_leilao = self.extract_info_leilao(soup=soup)
             if info_leilao:
                 data["info_leilao"] = info_leilao
+
             # -----------------------------------------------------------------------------
             info_valores_leilao = self.extract_valores_leiloes(soup=soup, valor_avaliacao=valor_avaliacao)
             if info_valores_leilao:
@@ -345,7 +481,9 @@ class RPA_CAIXA:
             return None
     
     def extract_info_leilao(self, soup):
-        data = {}
+        data = {
+            "status_imovel": "Venda Direta"
+        }
         try:
             info_leilao = soup.select('.related-box span')
             if info_leilao:
@@ -368,7 +506,7 @@ class RPA_CAIXA:
                         numero_leilao = data_leilao[0].split("Data do")[-1].strip()
                         data[f"Data do {numero_leilao}"] = data_leilao[1].strip()
                         data[f"Hora do {numero_leilao}"] = data_leilao[2].strip()
-                    
+                        data["status_imovel"] = numero_leilao
             return data
         except:
             return None

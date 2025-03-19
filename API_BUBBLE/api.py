@@ -35,7 +35,8 @@ class BubbleAPI_Imovel:
                 if response.status_code == 204:
                     return True
                 
-                print("Erro ao atualizar registro: ", response.status_code)
+                print(" 1-1 - Erro ao atualizar registro: ", response.status_code)
+                print(" 1-2 - Erro: ", response.text)
                 return False
         except Exception as e:
             print(f'Erro ao atualizar registro {unique_id}: {str(e)}')
